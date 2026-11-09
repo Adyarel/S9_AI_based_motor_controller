@@ -1,0 +1,15 @@
+Protocole pour com entre carte Arduino et IED Python.
+
+- Ouvrir l'IED python
+
+- Vérifier que l'IED Arduino est déconnecter de la carte
+
+- Vérifier que le port USB afficher dans le programme correspond au port USB connecter à la carte
+
+- Lancer le programme python, la console doit afficher "Connexion établie"
+
+- Utiliser la fonction "verif_port()" pour vérifier le port de la carte
+
+- Utiliser la fonction "arduino.close()" pour déconnecter l'IED python de la carte
+
+- Pour pouvoir relancer le programme python ou téléverser une nouvelle version du programme Arduino il faut obligatoirement déconnecter la carte avec "arduino.close"

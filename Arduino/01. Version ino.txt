@@ -1,0 +1,3 @@
+CMD_direct : permet de contrôler le moteur depuis l'IED Arduino
+
+CDM_python : permet de contrôler le moteur depuis un programe phyton
