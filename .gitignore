@@ -1,3 +1,8 @@
+# OWN FILES : mettez ici vos fichiers qui n'ont pas besoin d'être versionnés (ex : générés par un des codes)
+
+
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
