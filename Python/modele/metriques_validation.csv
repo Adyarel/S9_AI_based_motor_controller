@@ -1,0 +1,9 @@
+modele,partie,rmse_pwm,n
+statique_droite,niveaux intérieurs,0.367,24
+statique_droite,niveaux extrêmes (extrapolation),0.174,2
+statique_mlp,niveaux intérieurs,0.384,24
+statique_mlp,niveaux extrêmes (extrapolation),0.238,2
+dynamique_1er_ordre,"transitoire, niveaux intérieurs",8.827,624
+dynamique_1er_ordre,"régime établi, niveaux intérieurs",0.983,480
+dynamique_mlp,"transitoire, niveaux intérieurs",3.246,624
+dynamique_mlp,"régime établi, niveaux intérieurs",1.133,480
