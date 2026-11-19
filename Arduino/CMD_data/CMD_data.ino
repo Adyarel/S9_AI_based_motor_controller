@@ -1,52 +1,39 @@
 // ----------------------------------------------------- //
 // LOUINEAU Ronan - GE5
 // 05/11/26
-// Version 1.3 : Alim moteur MLI + communication python
-//               + acquisition courant / vitesse synchronisée sur la MLI
+// Version 1.4 : acquisition courant / vitesse ALTERNÉE (une seule conversion ADC par déclenchement)
 // ----------------------------------------------------- //
-//
-// Commandes reçues sur le port série (terminées par '\n') :
-//   "<n>"            : OCR1B = n (comportement de la version 1.2, réponse "Nouveau OCR1B = n")
-//   "A,<v>,<N>,<NB>" : acquisition. Échelon OCR1B = v appliqué à t = 0,
-//                      1 mesure toutes les N périodes MLI, NB mesures au total.
-//
-// Réponse à une acquisition (envoyée APRÈS la fin de l'acquisition) :
-//   DEBUT,<OCR1B>,<N>,<NB>,<TOP>
-//   <courant_brut>,<vitesse_brut>      (NB lignes, valeurs ADC 0..1023)
-//   FIN,<mesures_perdues>,<duree_us>,<periodes_mli>
 //
 // Instant d'échantillonnage : le convertisseur est déclenché par le BOTTOM du
 // timer 1 (débordement TOV1). La MLI étant "phase et fréquence correctes",
 // le BOTTOM est le milieu de l'impulsion à l'état haut : le courant y est
-// échantillonné à l'écart des commutations. La vitesse est mesurée juste
-// après, dans la même période MLI.
-// Le temps entre deux mesures vaut donc exactement N * 2 * TOP / Fclk.
+// échantillonné à l'écart des commutations.
+//
+// À chaque instant d'échantillonnage, UNE SEULE grandeur est convertie :
+//   instant 0 : courant, instant 1 : vitesse, instant 2 : courant, ...
+// Le temps entre deux conversions vaut N * 2 * TOP / Fclk.
+// Le temps entre deux mesures d'une même grandeur vaut donc 2 * N * 2 * TOP / Fclk,
+// et la vitesse k est mesurée N * 2 * TOP / Fclk APRÈS le courant k.
 // ----------------------------------------------------- //
+
 
 // --------------------Librairie----------------------- //
 
-#define T_h 0.0001    // T_hash = 100, micro sec
+#define T_h 0.0001    // T_hash = 100us
 #define TN_h 799      // TOP du timer 1 : période MLI = 2 * 799 / 16 MHz = 99,875 µs
 #define Fclkio 16000000.0
+#define NB_MAX 1400   // taille du tampon : 2 tableaux x 1400 x 2 octets = 5600 octets de SRAM (8 ko sur Mega)
 
 // --- Assignation des broches ---
 const int PIN_ALIM = A9; // PK1 : tension fixe
-const int PIN_CAPTEUR_COURANT = A14; // PK6 : Capteur courant (10 V/A)
-const int PIN_CAPTEUR_VITESSE = A15; // PK7 : Capteur vitesse (1 V/rad/s)
+//const int PIN_CAPTEUR_COURANT = A14; // PK6 : Capteur courant (10 V/A)
+//const int PIN_CAPTEUR_VITESSE = A15; // PK7 : Capteur vitesse (1 V/rad/s)
 
-const float GAIN_COURANT = 10.0;   // 10 V/A
-const float GAIN_VITESSE = 1.0;    // 1 V/rad/s
-
-// --- Acquisition ---
-#define NB_MAX 1400   // taille du tampon : 2 tableaux x 1400 x 2 octets = 5600 octets de SRAM (8 ko sur Mega)
-
-// ADC : référence AVcc (5 V), canal ADC14 = A14 (courant) et ADC15 = A15 (vitesse)
-// MUX5 (dans ADCSRB) reste à 1 pour les deux canaux
-#define ADMUX_COURANT ((1 << REFS0) | 6)
-#define ADMUX_VITESSE ((1 << REFS0) | 7)
+#define ADMUX_COURANT ((1 << REFS0) | 6) //canal ADC14 = A14 (courant)
+#define ADMUX_VITESSE ((1 << REFS0) | 7) // et ADC15 = A15 (vitesse)   // MUX5 (dans ADCSRB) reste à 1 pour les deux canaux  
 
 // Prédiviseur ADC /32 -> horloge ADC 500 kHz, une conversion = 26 µs
-// (2 conversions = environ 65 µs sur les 100 µs d'une période MLI)
+// (une seule conversion par déclenchement : large marge sur les 100 µs d'une période MLI)
 #define ADC_PRESCALER ((1 << ADPS2) | (1 << ADPS0))
 
 volatile uint16_t tab_courant[NB_MAX];
@@ -66,12 +53,15 @@ unsigned long t_fin_us = 0;
 
 
 void setup() {
+  // --------- Initialisation -------------- //
   Serial.begin(115200);
+  // 5V sur PIN_ALIM pour alimenter le moteur
   pinMode(PIN_ALIM, OUTPUT);
   digitalWrite(PIN_ALIM, LOW); 
   delay(500);
   digitalWrite(PIN_ALIM, HIGH);
 
+  // --------- Configuration de la MLI ------------- //
   DDRB = 0xC0;  // pb7 et pb6 sortie, MLI sur OC1B = PB6 = patte 6
   DDRF = 0x00;  // port F en entrée : entrée analogique sur A0 = patte 8 de l'ATmega2560
 
@@ -94,33 +84,35 @@ void setup() {
 }
 
 
-// Fin de conversion ADC : enchaîne courant puis vitesse, tout est stocké en RAM
+// Fin de conversion ADC (déclenchée par le BOTTOM du timer 1).
+// Une seule grandeur est convertie par déclenchement : courant, puis vitesse au
+// déclenchement enregistré suivant, puis courant, etc.
+// Entre deux mesures enregistrées, les conversions des périodes MLI intermédiaires
+// (si n_dec > 1) sont faites sur le même canal et ignorées.
 ISR(ADC_vect) {
-  if (etape == 0) {
-    // Conversion du COURANT terminée (déclenchée par le BOTTOM du timer 1)
-    TIFR1 = (1 << TOV1);               // acquitte le déclencheur, sinon pas de nouveau déclenchement
-    periodes++;
-    if (--cpt_dec == 0) {
-      cpt_dec = n_dec;
+  periodes++;
+  if (--cpt_dec == 0) {
+    cpt_dec = n_dec;
+    if (etape == 0) {
       tab_courant[idx] = ADC;
-      ADMUX = ADMUX_VITESSE;
+      ADMUX = ADMUX_VITESSE;           // le prochain instant mesurera la vitesse
       etape = 1;
-      ADCSRA |= (1 << ADSC);           // enchaîne la conversion de la VITESSE
-    }
-  } else {
-    // Conversion de la VITESSE terminée
-    tab_vitesse[idx] = ADC;
-    ADMUX = ADMUX_COURANT;
-    etape = 0;
-    if (TIFR1 & (1 << TOV1)) {
-      perdus++;                        // un BOTTOM est arrivé avant la fin du traitement
-    }
-    idx++;
-    if (idx >= nb_ech) {
-      ADCSRA &= ~((1 << ADATE) | (1 << ADIE));   // fin : plus de déclenchement, plus d'interruption
-      fini = true;
+    } else {
+      tab_vitesse[idx] = ADC;
+      ADMUX = ADMUX_COURANT;           // le prochain instant mesurera le courant
+      etape = 0;
+      idx++;
+      if (idx >= nb_ech) {
+        ADCSRA &= ~((1 << ADATE) | (1 << ADIE));   // fin : plus de déclenchement, plus d'interruption
+        fini = true;
+      }
     }
   }
+  // ADMUX est modifié AVANT l'acquittement du déclencheur (sinon on ne sait pas
+  // quel canal sera converti au prochain BOTTOM)
+  TIFR1 = (1 << TOV1);                 // acquitte le déclencheur, sinon pas de nouveau déclenchement
+  // Un déclenchement manqué se détecte côté Python : durée mesurée par micros()
+  // incohérente avec le nombre de périodes MLI comptées (variable "periodes").
 }
 
 
@@ -174,6 +166,25 @@ void acquisition(uint16_t consigne, uint16_t n, uint16_t nb) {
 }
 
 
+// Lit un entier decimal sans signe ni depassement, puis laisse le curseur
+// sur le separateur suivant. Les bornes sont verifiees avant toute conversion.
+bool lireEntierBorne(const char *&curseur, uint16_t maximum, uint16_t &valeur) {
+    if (!isDigit(*curseur)) {
+        return false;
+    }
+    uint32_t resultat = 0;
+    while (isDigit(*curseur)) {
+        resultat = resultat * 10 + (*curseur - '0');
+        if (resultat > maximum) {
+            return false;
+        }
+        curseur++;
+    }
+    valeur = (uint16_t)resultat;
+    return true;
+}
+
+
 void recevoirCommande() {
 
     if (Serial.available() > 0) {
@@ -193,9 +204,15 @@ void recevoirCommande() {
 
         // Commande d'acquisition : "A,<OCR1B>,<N>,<NB>"
         if (message[0] == 'A') {
-            unsigned int v, nd, nb;
-            if (sscanf(message, "A,%u,%u,%u", &v, &nd, &nb) != 3
-                || v > TN_h || nd < 1 || nb < 1 || nb > NB_MAX) {
+            uint16_t v, nd, nb;
+            const char *curseur = message + 1;
+            if (*curseur++ != ','
+                || !lireEntierBorne(curseur, TN_h, v)
+                || *curseur++ != ','
+                || !lireEntierBorne(curseur, UINT16_MAX, nd)
+                || *curseur++ != ','
+                || !lireEntierBorne(curseur, NB_MAX, nb)
+                || *curseur != '\0' || nd < 1 || nb < 1) {
                 Serial.println("ERR,commande invalide");
                 return;
             }
@@ -203,17 +220,18 @@ void recevoirCommande() {
             return;
         }
 
-        // Vérification des caractères reçus
+        // Verification des chiffres et saturation progressive : atoi() peut
+        // depasser la capacite d'un int (16 bits sur cette carte).
+        uint16_t valeur = 0;
         for (unsigned int i = 0; i < n; i++) {
             if (!isDigit(message[i])) {
                 return;
             }
+            valeur = valeur * 10 + (message[i] - '0');
+            if (valeur > TN_h) {
+                valeur = TN_h;
+            }
         }
-
-        int valeur = atoi(message);
-
-        // Limitation à la valeur maximale du Timer1
-        valeur = constrain(valeur, 0, TN_h);
 
         // Mise à jour de la PWM
         OCR1B = valeur;
