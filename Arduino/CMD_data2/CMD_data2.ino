@@ -19,25 +19,18 @@
 
 // --------------------Librairie----------------------- //
 
-#define T_h 0.0001    // T_hash = 100, micro sec
+#define T_h 0.0001    // T_hash = 100us
 #define TN_h 799      // TOP du timer 1 : période MLI = 2 * 799 / 16 MHz = 99,875 µs
 #define Fclkio 16000000.0
+#define NB_MAX 1400   // taille du tampon : 2 tableaux x 1400 x 2 octets = 5600 octets de SRAM (8 ko sur Mega)
 
 // --- Assignation des broches ---
 const int PIN_ALIM = A9; // PK1 : tension fixe
-const int PIN_CAPTEUR_COURANT = A11; // PK2 : Capteur courant (10 V/A)
-const int PIN_CAPTEUR_VITESSE = A15; // PK7 : Capteur vitesse (1 V/rad/s)
+//const int PIN_CAPTEUR_COURANT = A14; // PK6 : Capteur courant (10 V/A)
+//const int PIN_CAPTEUR_VITESSE = A15; // PK7 : Capteur vitesse (1 V/rad/s)
 
-const float GAIN_COURANT = 10.0;   // 10 V/A
-const float GAIN_VITESSE = 1.0;    // 1 V/rad/s
-
-// --- Acquisition ---
-#define NB_MAX 1400   // taille du tampon : 2 tableaux x 1400 x 2 octets = 5600 octets de SRAM (8 ko sur Mega)
-
-// ADC : référence AVcc (5 V), canal ADC14 = A14 (courant) et ADC15 = A15 (vitesse)
-// MUX5 (dans ADCSRB) reste à 1 pour les deux canaux
-#define ADMUX_COURANT ((1 << REFS0) | 6)
-#define ADMUX_VITESSE ((1 << REFS0) | 7)
+#define ADMUX_COURANT ((1 << REFS0) | 6) //canal ADC14 = A14 (courant)
+#define ADMUX_VITESSE ((1 << REFS0) | 7) // et ADC15 = A15 (vitesse)   // MUX5 (dans ADCSRB) reste à 1 pour les deux canaux  
 
 // Prédiviseur ADC /32 -> horloge ADC 500 kHz, une conversion = 26 µs
 // (une seule conversion par déclenchement : large marge sur les 100 µs d'une période MLI)
@@ -60,12 +53,15 @@ unsigned long t_fin_us = 0;
 
 
 void setup() {
+  // --------- Initialisation -------------- //
   Serial.begin(115200);
+  // 5V sur PIN_ALIM pour alimenter le moteur
   pinMode(PIN_ALIM, OUTPUT);
   digitalWrite(PIN_ALIM, LOW); 
   delay(500);
   digitalWrite(PIN_ALIM, HIGH);
 
+  // --------- Configuration de la MLI ------------- //
   DDRB = 0xC0;  // pb7 et pb6 sortie, MLI sur OC1B = PB6 = patte 6
   DDRF = 0x00;  // port F en entrée : entrée analogique sur A0 = patte 8 de l'ATmega2560
 
