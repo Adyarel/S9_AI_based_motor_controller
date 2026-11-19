@@ -1,7 +1,7 @@
 # OWN FILES : mettez ici vos fichiers qui n'ont pas besoin d'être versionnés (ex : générés par un des codes)
-
-
-
+Python\csv
+Python\figures
+Python\modele
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
