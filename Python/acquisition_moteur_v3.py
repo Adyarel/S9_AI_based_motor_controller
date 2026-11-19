@@ -45,8 +45,9 @@ def _lire_ligne():
 
 def _couper_moteur():
     arduino.write(b"0\n")
-    _lire_ligne()       # "Nouveau OCR1B = 0"
-
+    string = _lire_ligne()       # "Nouveau OCR1B = 0"
+    if string != "0":
+        raise RuntimeError(f"Réponse inattendue de l'Arduino : {string!r}")
 
 def modifier_PWM(pourcentage):
     """Consigne PWM directe, sans acquisition : sert à vérifier que le moteur tourne.
