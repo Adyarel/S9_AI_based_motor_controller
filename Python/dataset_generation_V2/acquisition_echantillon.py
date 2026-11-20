@@ -28,8 +28,18 @@ else:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from convertir_csv_v3 import VREF, RESOLUTION, GAIN_COURANT, GAIN_VITESSE
 
+def verif_port():
+    ports = serial.tools.list_ports.comports()
 
-PORT = "COM4"
+    for port in ports:
+        print(port.device, "-", port.description)
+
+        if "Arduino" in port.description:
+            return port.device
+
+    raise RuntimeError("Aucune carte Arduino détectée")
+
+PORT = verif_port()
 BAUD = 115200
 TOP = 799
 F_CLK = 16_000_000
