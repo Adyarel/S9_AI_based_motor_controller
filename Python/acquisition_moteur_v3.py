@@ -46,7 +46,7 @@ def _lire_ligne():
 def _couper_moteur():
     arduino.write(b"0\n")
     string = _lire_ligne()       # "Nouveau OCR1B = 0"
-    if string != "0":
+    if string != "Nouveau OCR1B = 0":
         raise RuntimeError(f"Réponse inattendue de l'Arduino : {string!r}")
 
 def modifier_PWM(pourcentage):

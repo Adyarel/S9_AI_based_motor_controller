@@ -6,6 +6,7 @@
 # ------------------------------------------------------------ #
 
 import time
+import os
 
 # Import de la fonction principale depuis votre script
 from acquisition_moteur_v3 import acquisition 
@@ -20,25 +21,28 @@ DUREE_MESURE_S = 1.5  # Durée d'acquisition pour chaque palier
 REPOS_ENTRE_ESSAIS_S = 0  # Temps pour laisser le moteur s'arrêter complètement
 # ------------------------------------------------------------ #
 
-def lancer_campagne():
-    print(f"=== Début de la campagne d'essais : PWM de {PWM_DEBUT}% à {PWM_FIN}% ===")
-    
-    for pwm in range(PWM_DEBUT, PWM_FIN + 1, PAS_PWM):
+DOSSIER_BRUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "csv", "brut") # dossier des CSV bruts
+DOSSIER_CLEAN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "csv", "clean")
+
+def lancer_campagne(pwm_debut=PWM_DEBUT, pwm_fin=PWM_FIN, pas_pwm=PAS_PWM, duree_mesure_s=DUREE_MESURE_S, repos_entre_essai_s=REPOS_ENTRE_ESSAIS_S, dossier_brut=DOSSIER_BRUT, dossier_clean=DOSSIER_CLEAN):
+    print(f"=== Début de la campagne d'essais : PWM de {pwm_debut}% à {pwm_fin}% (pas de {pas_pwm}%) ===")
+
+    for pwm in range(pwm_debut, pwm_fin + 1, pas_pwm):
         print(f"\n[{time.strftime('%H:%M:%S')}] --- Lancement de l'essai pour PWM = {pwm}% ---")
-        
+
         try:
-            # Appel direct de votre fonction existante
-            # Le port série reste ouvert et réutilisé à chaque itération
             acquisition(
-                pwm_pct=pwm, 
-                duree_s=DUREE_MESURE_S, 
-                repos_s=REPOS_ENTRE_ESSAIS_S
+                pwm_pct=pwm,
+                duree_s=duree_mesure_s,
+                repos_s=repos_entre_essai_s,
+                dossier_brut=dossier_brut,
+                dossier_clean=dossier_clean,
             )
-            
+
         except Exception as e:
             print(f"Erreur inattendue lors de l'essai à {pwm}% : {e}")
             print("Poursuite avec la valeur suivante...")
-            
+
     print("\n=== Campagne d'essais terminée avec succès ===")
     print("Tous les fichiers CSV ont été générés dans les dossiers correspondants.")
 

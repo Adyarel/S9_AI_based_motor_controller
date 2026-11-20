@@ -30,7 +30,7 @@ import os
 # ---------------------------Paramètres--------------------------- #
 SEPARATEUR = ","        # le même que dans acquisition_moteur_v2.py
 # dossier des CSV convertis : csv/clean à côté de ce script (créé si absent)
-DOSSIER_CLEAN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "csv", "clean")
+DOSSIER_CLEAN = os.path.join(os.path.dirname(os.path.abspath(__file__)),"test1", "csv", "clean")
 VREF = 5.0              # tension de référence de l'ADC (AVcc) en V
 RESOLUTION = 1023       # ADC 10 bits : 0..1023
 GAIN_COURANT = 10.0     # capteur de courant : 10 V/A
